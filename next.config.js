@@ -1,3 +1,5 @@
+const { imageRemotePatterns } = require("./lib/image-remote-patterns")
+
 const withBundleAnalyzer = require("@next/bundle-analyzer")({
   enabled: process.env.ANALYZE === "true"
 })
@@ -10,20 +12,7 @@ module.exports = withBundleAnalyzer(
   withPWA({
     reactStrictMode: true,
     images: {
-      remotePatterns: [
-        {
-          protocol: "http",
-          hostname: "localhost"
-        },
-        {
-          protocol: "http",
-          hostname: "127.0.0.1"
-        },
-        {
-          protocol: "https",
-          hostname: "**"
-        }
-      ]
+      remotePatterns: imageRemotePatterns(process.env.NEXT_PUBLIC_SUPABASE_URL)
     },
     experimental: {
       serverComponentsExternalPackages: ["sharp", "onnxruntime-node"]

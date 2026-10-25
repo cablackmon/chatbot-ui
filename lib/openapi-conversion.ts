@@ -108,7 +108,10 @@ export const openapiToFunctions = async (
     for (const [method, specWithRef] of Object.entries(
       methods as Record<string, any>
     )) {
-      const spec: any = await $RefParser.dereference(specWithRef)
+      // External $refs would make the server fetch (or read) arbitrary URLs.
+      const spec: any = await $RefParser.dereference(specWithRef, {
+        resolve: { external: false }
+      })
       const functionName = spec.operationId
       const desc = spec.description || spec.summary || ""
 

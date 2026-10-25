@@ -1,5 +1,11 @@
 import { openapiToFunctions } from "@/lib/openapi-conversion"
 import { checkApiKey, getServerProfile } from "@/lib/server/server-chat-helpers"
+import {
+  TRUSTED_TOOL_HOSTS,
+  UntrustedDestinationError,
+  assertTrustedUrl,
+  fetchTrustedUrl
+} from "@/lib/server/trusted-fetch"
 import { Tables } from "@/supabase/types"
 import { ChatSettings } from "@/types"
 import { OpenAIStream, StreamingTextResponse } from "ai"
@@ -27,6 +33,12 @@ export async function POST(request: Request) {
     let allTools: OpenAI.Chat.Completions.ChatCompletionTool[] = []
     let allRouteMaps = {}
     let schemaDetails = []
+
+    // Reject untrusted tool servers before any upstream request, including
+    // the model call and $ref resolution.
+    for (const selectedTool of selectedTools) {
+      assertTrustedToolServer(selectedTool.schema)
+    }
 
     for (const selectedTool of selectedTools) {
       try {
@@ -150,7 +162,11 @@ export async function POST(request: Request) {
             body: JSON.stringify(bodyContent) // Use the extracted requestBody or the entire parsedArgs
           }
 
-          const response = await fetch(fullUrl, requestInit)
+          const response = await fetchTrustedUrl(
+            fullUrl,
+            requestInit,
+            TRUSTED_TOOL_HOSTS
+          )
 
           if (!response.ok) {
             data = {
@@ -175,10 +191,14 @@ export async function POST(request: Request) {
             headers = JSON.parse(customHeaders)
           }
 
-          const response = await fetch(fullUrl, {
-            method: "GET",
-            headers: headers
-          })
+          const response = await fetchTrustedUrl(
+            fullUrl,
+            {
+              method: "GET",
+              headers: headers
+            },
+            TRUSTED_TOOL_HOSTS
+          )
 
           if (!response.ok) {
             data = {
@@ -209,10 +229,24 @@ export async function POST(request: Request) {
     return new StreamingTextResponse(stream)
   } catch (error: any) {
     console.error(error)
-    const errorMessage = error.error?.message || "An unexpected error occurred"
+    const errorMessage =
+      error instanceof UntrustedDestinationError
+        ? error.message
+        : error.error?.message || "An unexpected error occurred"
     const errorCode = error.status || 500
     return new Response(JSON.stringify({ message: errorMessage }), {
       status: errorCode
     })
   }
+}
+
+function assertTrustedToolServer(schema: Tables<"tools">["schema"]) {
+  let serverUrl: unknown
+  try {
+    serverUrl = JSON.parse(schema as string)?.servers?.[0]?.url
+  } catch {
+    // Unparseable schemas are skipped by the conversion step and never fetched.
+    return
+  }
+  assertTrustedUrl(serverUrl as string, TRUSTED_TOOL_HOSTS)
 }
