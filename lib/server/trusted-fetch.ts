@@ -135,10 +135,77 @@ export async function fetchTrustedUrl(
   return response
 }
 
-// Azure OpenAI requests from Node.js routes may only go to the host of the
-// endpoint the operator set in the AZURE_OPENAI_ENDPOINT server environment
-// variable. A user-entered profile endpoint has no trusted provenance and
-// fails closed. Returns the canonical endpoint without a trailing slash.
+// Fixed hosts of the built-in model providers. Each one is the destination
+// the repo already calls; none comes from user data:
+// - openai: openai SDK default base URL (https://api.openai.com/v1)
+// - anthropic: @anthropic-ai/sdk default base URL (https://api.anthropic.com)
+// - google: @google/generative-ai DEFAULT_BASE_URL
+// - mistral, groq, perplexity, openrouter: the baseURL in their chat route
+export const TRUSTED_PROVIDER_HOSTS = {
+  openai: "api.openai.com",
+  anthropic: "api.anthropic.com",
+  google: "generativelanguage.googleapis.com",
+  mistral: "api.mistral.ai",
+  groq: "api.groq.com",
+  perplexity: "api.perplexity.ai",
+  openrouter: "openrouter.ai"
+} as const
+
+// A custom model's base_url is user data from the models table. It may only
+// point at an OpenAI-compatible host the app already trusts above; any other
+// destination (self-hosted, local, unknown providers) fails closed.
+export const TRUSTED_CUSTOM_MODEL_HOSTS: readonly string[] = [
+  TRUSTED_PROVIDER_HOSTS.openai,
+  TRUSTED_PROVIDER_HOSTS.mistral,
+  TRUSTED_PROVIDER_HOSTS.groq,
+  TRUSTED_PROVIDER_HOSTS.perplexity,
+  TRUSTED_PROVIDER_HOSTS.openrouter
+]
+
+// Validates a user-supplied SDK base URL. Returns it canonical, without a
+// trailing slash.
+export function assertTrustedBaseUrl(
+  rawBaseUrl: string | null | undefined,
+  trustedHosts: readonly string[]
+): string {
+  const url = assertTrustedUrl(rawBaseUrl || "", trustedHosts)
+  if (url.search !== "" || url.hash !== "") {
+    throw new UntrustedDestinationError("base URL must not have a query")
+  }
+  return url.href.replace(/\/$/, "")
+}
+
+// fetch for SDK clients (openai, @anthropic-ai/sdk): every request the SDK
+// makes is checked against trustedHosts and redirects are never followed.
+// Uses the global fetch at call time and no Node-only APIs, so it also runs
+// on the Edge runtime.
+export function createTrustedFetch(trustedHosts: readonly string[]) {
+  return async (input: RequestInfo | URL, init: RequestInit = {}) => {
+    if (typeof input !== "string" && !(input instanceof URL)) {
+      throw new UntrustedDestinationError("unsupported request input")
+    }
+    return fetchTrustedUrl(String(input), init, trustedHosts, (url, opts) =>
+      fetch(url, opts)
+    )
+  }
+}
+
+// Host of the operator's AZURE_OPENAI_ENDPOINT, or none when it is unset or
+// invalid, so a guarded Azure client fails closed.
+export function operatorAzureHosts(
+  operatorEndpoint: string | undefined = process.env.AZURE_OPENAI_ENDPOINT
+): string[] {
+  try {
+    return operatorEndpoint ? [new URL(operatorEndpoint).hostname] : []
+  } catch {
+    return []
+  }
+}
+
+// Azure OpenAI requests may only go to the host of the endpoint the operator
+// set in the AZURE_OPENAI_ENDPOINT server environment variable. A
+// user-entered profile endpoint has no trusted provenance and fails closed.
+// Returns the canonical endpoint without a trailing slash.
 export function assertTrustedAzureEndpoint(
   profileEndpoint: string | null | undefined,
   operatorEndpoint: string | undefined = process.env.AZURE_OPENAI_ENDPOINT

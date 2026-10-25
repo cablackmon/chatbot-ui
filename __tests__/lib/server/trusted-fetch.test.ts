@@ -6,7 +6,9 @@ import {
   UntrustedDestinationError,
   assertTrustedAzureEndpoint,
   assertTrustedUrl,
-  fetchTrustedUrl
+  createTrustedFetch,
+  fetchTrustedUrl,
+  operatorAzureHosts
 } from "@/lib/server/trusted-fetch"
 
 const TRUSTED = ["api.trusted.com"]
@@ -207,5 +209,63 @@ describe("assertTrustedAzureEndpoint", () => {
     expect(() => assertTrustedAzureEndpoint(operator, operator)).toThrow(
       UntrustedDestinationError
     )
+  })
+})
+
+describe("createTrustedFetch", () => {
+  let fetchSpy: jest.SpyInstance
+
+  beforeEach(() => {
+    fetchSpy = jest.spyOn(global, "fetch").mockImplementation(async () => {
+      throw new Error("unexpected network request")
+    })
+  })
+
+  afterEach(() => fetchSpy.mockRestore())
+
+  it("fetches a trusted URL with redirect: manual", async () => {
+    fetchSpy.mockImplementation(async () => okResponse())
+    const guarded = createTrustedFetch(TRUSTED)
+
+    const response = await guarded(new URL("https://API.trusted.com./v1/x"), {
+      method: "POST",
+      redirect: "follow"
+    })
+
+    expect(response.status).toBe(200)
+    expect(fetchSpy).toHaveBeenCalledWith("https://api.trusted.com/v1/x", {
+      method: "POST",
+      redirect: "manual"
+    })
+  })
+
+  it.each([
+    ["an untrusted host", "https://evil.example.com/v1"],
+    ["a Request object", new Request("https://api.trusted.com/v1")]
+  ])("rejects %s without a request", async (_label, input) => {
+    const guarded = createTrustedFetch(TRUSTED)
+
+    await expect(guarded(input as any)).rejects.toBeInstanceOf(
+      UntrustedDestinationError
+    )
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it("trusts nothing when the host list is empty", async () => {
+    await expect(
+      createTrustedFetch(operatorAzureHosts(""))("https://x.openai.azure.com")
+    ).rejects.toBeInstanceOf(UntrustedDestinationError)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe("operatorAzureHosts", () => {
+  it.each([
+    ["https://contoso.openai.azure.com/", ["contoso.openai.azure.com"]],
+    [undefined, []],
+    ["", []],
+    ["not a url", []]
+  ])("%s -> %j", (endpoint, hosts) => {
+    expect(operatorAzureHosts(endpoint)).toEqual(hosts)
   })
 })

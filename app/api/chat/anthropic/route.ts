@@ -1,5 +1,9 @@
 import { CHAT_SETTING_LIMITS } from "@/lib/chat-setting-limits"
 import { checkApiKey, getServerProfile } from "@/lib/server/server-chat-helpers"
+import {
+  createTrustedFetch,
+  TRUSTED_PROVIDER_HOSTS
+} from "@/lib/server/trusted-fetch"
 import { getBase64FromDataURL, getMediaTypeFromDataURL } from "@/lib/utils"
 import { ChatSettings } from "@/types"
 import Anthropic from "@anthropic-ai/sdk"
@@ -56,7 +60,9 @@ export async function POST(request: NextRequest) {
     )
 
     const anthropic = new Anthropic({
-      apiKey: profile.anthropic_api_key || ""
+      apiKey: profile.anthropic_api_key || "",
+      baseURL: "https://api.anthropic.com",
+      fetch: createTrustedFetch([TRUSTED_PROVIDER_HOSTS.anthropic])
     })
 
     try {

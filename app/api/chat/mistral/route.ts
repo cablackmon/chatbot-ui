@@ -1,5 +1,9 @@
 import { CHAT_SETTING_LIMITS } from "@/lib/chat-setting-limits"
 import { checkApiKey, getServerProfile } from "@/lib/server/server-chat-helpers"
+import {
+  createTrustedFetch,
+  TRUSTED_PROVIDER_HOSTS
+} from "@/lib/server/trusted-fetch"
 import { ChatSettings } from "@/types"
 import { OpenAIStream, StreamingTextResponse } from "ai"
 import OpenAI from "openai"
@@ -21,7 +25,8 @@ export async function POST(request: Request) {
     // Mistral is compatible the OpenAI SDK
     const mistral = new OpenAI({
       apiKey: profile.mistral_api_key || "",
-      baseURL: "https://api.mistral.ai/v1"
+      baseURL: "https://api.mistral.ai/v1",
+      fetch: createTrustedFetch([TRUSTED_PROVIDER_HOSTS.mistral])
     })
 
     const response = await mistral.chat.completions.create({

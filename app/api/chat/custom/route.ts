@@ -1,3 +1,8 @@
+import {
+  assertTrustedBaseUrl,
+  createTrustedFetch,
+  TRUSTED_CUSTOM_MODEL_HOSTS
+} from "@/lib/server/trusted-fetch"
 import { Database } from "@/supabase/types"
 import { ChatSettings } from "@/types"
 import { createClient } from "@supabase/supabase-js"
@@ -32,9 +37,15 @@ export async function POST(request: Request) {
       throw new Error(error.message)
     }
 
+    const baseURL = assertTrustedBaseUrl(
+      customModel.base_url,
+      TRUSTED_CUSTOM_MODEL_HOSTS
+    )
+
     const custom = new OpenAI({
       apiKey: customModel.api_key || "",
-      baseURL: customModel.base_url
+      baseURL,
+      fetch: createTrustedFetch(TRUSTED_CUSTOM_MODEL_HOSTS)
     })
 
     const response = await custom.chat.completions.create({
