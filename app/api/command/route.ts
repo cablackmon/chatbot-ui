@@ -1,5 +1,9 @@
 import { CHAT_SETTING_LIMITS } from "@/lib/chat-setting-limits"
 import { checkApiKey, getServerProfile } from "@/lib/server/server-chat-helpers"
+import {
+  createTrustedFetch,
+  TRUSTED_PROVIDER_HOSTS
+} from "@/lib/server/trusted-fetch"
 import OpenAI from "openai"
 
 export const runtime = "edge"
@@ -17,7 +21,9 @@ export async function POST(request: Request) {
 
     const openai = new OpenAI({
       apiKey: profile.openai_api_key || "",
-      organization: profile.openai_organization_id
+      organization: profile.openai_organization_id,
+      baseURL: "https://api.openai.com/v1",
+      fetch: createTrustedFetch([TRUSTED_PROVIDER_HOSTS.openai])
     })
 
     const response = await openai.chat.completions.create({

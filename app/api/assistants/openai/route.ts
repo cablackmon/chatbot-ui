@@ -1,4 +1,8 @@
 import { checkApiKey, getServerProfile } from "@/lib/server/server-chat-helpers"
+import {
+  createTrustedFetch,
+  TRUSTED_PROVIDER_HOSTS
+} from "@/lib/server/trusted-fetch"
 import { ServerRuntime } from "next"
 import OpenAI from "openai"
 
@@ -12,7 +16,9 @@ export async function GET() {
 
     const openai = new OpenAI({
       apiKey: profile.openai_api_key || "",
-      organization: profile.openai_organization_id
+      organization: profile.openai_organization_id,
+      baseURL: "https://api.openai.com/v1",
+      fetch: createTrustedFetch([TRUSTED_PROVIDER_HOSTS.openai])
     })
 
     const myAssistants = await openai.beta.assistants.list({

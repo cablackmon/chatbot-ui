@@ -1,5 +1,9 @@
 import { CHAT_SETTING_LIMITS } from "@/lib/chat-setting-limits"
 import { checkApiKey, getServerProfile } from "@/lib/server/server-chat-helpers"
+import {
+  createTrustedFetch,
+  TRUSTED_PROVIDER_HOSTS
+} from "@/lib/server/trusted-fetch"
 import { ChatSettings } from "@/types"
 import { OpenAIStream, StreamingTextResponse } from "ai"
 import OpenAI from "openai"
@@ -20,7 +24,8 @@ export async function POST(request: Request) {
     // Groq is compatible with the OpenAI SDK
     const groq = new OpenAI({
       apiKey: profile.groq_api_key || "",
-      baseURL: "https://api.groq.com/openai/v1"
+      baseURL: "https://api.groq.com/openai/v1",
+      fetch: createTrustedFetch([TRUSTED_PROVIDER_HOSTS.groq])
     })
 
     const response = await groq.chat.completions.create({

@@ -1,5 +1,11 @@
 import { generateLocalEmbedding } from "@/lib/generate-local-embedding"
 import { checkApiKey, getServerProfile } from "@/lib/server/server-chat-helpers"
+import {
+  assertTrustedAzureEndpoint,
+  createTrustedFetch,
+  operatorAzureHosts,
+  TRUSTED_PROVIDER_HOSTS
+} from "@/lib/server/trusted-fetch"
 import { Database } from "@/supabase/types"
 import { createClient } from "@supabase/supabase-js"
 import OpenAI from "openai"
@@ -23,9 +29,13 @@ export async function POST(request: Request) {
 
     const profile = await getServerProfile()
 
+    let azureEndpoint = profile.azure_openai_endpoint
     if (embeddingsProvider === "openai") {
       if (profile.use_azure_openai) {
         checkApiKey(profile.azure_openai_api_key, "Azure OpenAI")
+        azureEndpoint = assertTrustedAzureEndpoint(
+          profile.azure_openai_endpoint
+        )
       } else {
         checkApiKey(profile.openai_api_key, "OpenAI")
       }
@@ -37,14 +47,17 @@ export async function POST(request: Request) {
     if (profile.use_azure_openai) {
       openai = new OpenAI({
         apiKey: profile.azure_openai_api_key || "",
-        baseURL: `${profile.azure_openai_endpoint}/openai/deployments/${profile.azure_openai_embeddings_id}`,
+        baseURL: `${azureEndpoint}/openai/deployments/${profile.azure_openai_embeddings_id}`,
         defaultQuery: { "api-version": "2023-12-01-preview" },
-        defaultHeaders: { "api-key": profile.azure_openai_api_key }
+        defaultHeaders: { "api-key": profile.azure_openai_api_key },
+        fetch: createTrustedFetch(operatorAzureHosts())
       })
     } else {
       openai = new OpenAI({
         apiKey: profile.openai_api_key || "",
-        organization: profile.openai_organization_id
+        organization: profile.openai_organization_id,
+        baseURL: "https://api.openai.com/v1",
+        fetch: createTrustedFetch([TRUSTED_PROVIDER_HOSTS.openai])
       })
     }
 

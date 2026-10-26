@@ -1,4 +1,10 @@
 import { checkApiKey, getServerProfile } from "@/lib/server/server-chat-helpers"
+import {
+  assertTrustedAzureEndpoint,
+  createTrustedFetch,
+  operatorAzureHosts,
+  UntrustedDestinationError
+} from "@/lib/server/trusted-fetch"
 import { ChatAPIPayload } from "@/types"
 import { OpenAIStream, StreamingTextResponse } from "ai"
 import OpenAI from "openai"
@@ -44,11 +50,14 @@ export async function POST(request: Request) {
       )
     }
 
+    const endpoint = assertTrustedAzureEndpoint(ENDPOINT)
+
     const azureOpenai = new OpenAI({
       apiKey: KEY,
-      baseURL: `${ENDPOINT}/openai/deployments/${DEPLOYMENT_ID}`,
+      baseURL: `${endpoint}/openai/deployments/${DEPLOYMENT_ID}`,
       defaultQuery: { "api-version": "2023-12-01-preview" },
-      defaultHeaders: { "api-key": KEY }
+      defaultHeaders: { "api-key": KEY },
+      fetch: createTrustedFetch(operatorAzureHosts())
     })
 
     const response = await azureOpenai.chat.completions.create({
@@ -63,7 +72,10 @@ export async function POST(request: Request) {
 
     return new StreamingTextResponse(stream)
   } catch (error: any) {
-    const errorMessage = error.error?.message || "An unexpected error occurred"
+    const errorMessage =
+      error instanceof UntrustedDestinationError
+        ? error.message
+        : error.error?.message || "An unexpected error occurred"
     const errorCode = error.status || 500
     return new Response(JSON.stringify({ message: errorMessage }), {
       status: errorCode

@@ -1,4 +1,8 @@
 import { checkApiKey, getServerProfile } from "@/lib/server/server-chat-helpers"
+import {
+  createTrustedFetch,
+  TRUSTED_PROVIDER_HOSTS
+} from "@/lib/server/trusted-fetch"
 import { ChatSettings } from "@/types"
 import { OpenAIStream, StreamingTextResponse } from "ai"
 import OpenAI from "openai"
@@ -20,7 +24,8 @@ export async function POST(request: Request) {
     // Perplexity is compatible the OpenAI SDK
     const perplexity = new OpenAI({
       apiKey: profile.perplexity_api_key || "",
-      baseURL: "https://api.perplexity.ai/"
+      baseURL: "https://api.perplexity.ai/",
+      fetch: createTrustedFetch([TRUSTED_PROVIDER_HOSTS.perplexity])
     })
 
     const response = await perplexity.chat.completions.create({
